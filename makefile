@@ -2,7 +2,7 @@
 CC = g++
 
 # Compiler flags
-CFLAGS = -g -Wall -I./include
+CFLAGS = -g -Wall -std=c++11 -I./include
 
 # Target executables
 TARGET_SERVER = chat_server
