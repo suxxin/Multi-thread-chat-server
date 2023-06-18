@@ -5,8 +5,22 @@
 #include <unistd.h>
 #include <thread>
 #include <unordered_map>
+#include <vector>
+#include <algorithm>
+#include <mutex>
 
-std::unordered_map<std::string, std::string> client_map; // maps < sin_addr:port -> client # >
+std::unordered_map<std::string, std::string> client_name_map; // maps < sin_addr:port -> client # >
+std::vector<int> client_sockets; // store all active client sockets
+std::mutex lock; // client_socket is a shared resource between threads, so need a lock to protect
+
+void broadcast(int sender_socket, std::string client_name, const char* message) {
+    lock.lock();
+    for (int c : client_sockets) {
+        std::string brd_msg = "\n" + client_name + ": "+ std::string(message);
+        write(c, brd_msg.c_str(), brd_msg.size());
+    }
+    lock.unlock();
+}
 
 void handle_client(int client_socket, std::string sin_addr, std::string sin_port) {
     char client_message[1000];
@@ -15,15 +29,19 @@ void handle_client(int client_socket, std::string sin_addr, std::string sin_port
     // new client 
     std::cout << "New client connected: " << sin_addr << ":" << sin_port << std::endl;
     std::string client_addr_port = sin_addr + ":" + sin_port;
-    client_map[client_addr_port] = "client" + std::to_string(client_map.size());
+    client_name_map[client_addr_port] = "client" + std::to_string(client_name_map.size());
+    // add to active client lists
+    lock.lock();
+    client_sockets.push_back(client_socket);
+    lock.unlock();
 
     // receive a message from client
     while ((read_size = recv(client_socket, client_message, 1000, 0)) > 0) {
         // log client's message 
-        // TODO: more prfessional log methoid? 
-        std::cout << client_map[client_addr_port] << ":" << client_message << std::endl;
-        // echo back to the client
-        write(client_socket, client_message, strlen(client_message));
+        // TODO: more prfessional log method? 
+        std::cout << client_name_map[client_addr_port] << ":" << client_message << std::endl;
+        // broadcast
+        broadcast(client_socket, client_name_map[client_addr_port], client_message);        
         memset(client_message, 0, 1000);
     }
 
@@ -34,6 +52,12 @@ void handle_client(int client_socket, std::string sin_addr, std::string sin_port
     }
 
     close(client_socket);
+
+    // a client left, remove from active client list
+    lock.lock();
+    client_sockets.erase(std::remove(client_sockets.begin(), client_sockets.end(), client_socket), client_sockets.end());
+    lock.unlock();
+
 }
 
 int main() {

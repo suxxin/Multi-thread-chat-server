@@ -3,11 +3,25 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <thread>
+
+void receive_messages(int sock) {
+    char server_reply[1000];
+    while (1) {
+        // receive reply from the server
+        if (recv(sock, server_reply, 1000, 0) < 0) {
+            std::cout << "Recv failed" << std::endl;
+            break;
+        }
+
+        std::cout << server_reply << std::endl;
+        memset(server_reply, 0, sizeof(server_reply));
+    }
+}
 
 int main() {
     int sock;
     struct sockaddr_in server;
-    char server_reply[1000];
 
     // create socket
     sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -26,9 +40,12 @@ int main() {
         return 1;
     }
 
+    // detach thread to continously receive messages from the server
+    std::thread recv_thread(receive_messages, sock);
+    recv_thread.detach();
+
     // communicate with the server
     while (1) {
-        std::cout << "Enter message: ";
         std::string message;
         std::getline(std::cin, message); // user chat message ends with newline (press enter = send message)
          
@@ -36,16 +53,7 @@ int main() {
         if (send(sock, message.c_str(), 1000, 0) < 0) {
             std::cout << "Send failed" << std::endl;
             break;
-        }
-
-        // receive reply from the server
-        if (recv(sock, server_reply, 1000, 0) < 0) {
-            std::cout << "Recv failed" << std::endl;
-            break;
-        }
-
-        std::cout << "Server reply: " << server_reply << std::endl;
-        memset(server_reply, 0, sizeof(server_reply));
+        }        
     }
 
     close(sock);
